@@ -16,7 +16,7 @@ impl MigrationName for Migration {
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         Self::create_users_table(manager).await?;
-        Self::add_user(manager, "admin", "asdf").await
+        Self::add_user(manager, "admin@admin", "asdf").await
     }
 
     async fn down(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
@@ -36,7 +36,7 @@ impl Migration{
                         .auto_increment()
                         .primary_key()
                     )
-                    .col(ColumnDef::new(Users::UserName)
+                    .col(ColumnDef::new(Users::Email)
                         .string()
                         .not_null()
                     )
@@ -70,7 +70,7 @@ impl Migration{
 
         let insert = Query::insert()
             .into_table(Users::Table)
-            .columns([Users::UserName, Users::EncryptedPassword,])
+            .columns([Users::Email, Users::EncryptedPassword,])
             .select_from(
                 Query::select()
                     .expr(Expr::val(username))
@@ -88,7 +88,7 @@ impl Migration{
 enum Users{
     Table,
     Id,
-    UserName,
+    Email,
     EncryptedPassword,
     IsActive,
 }

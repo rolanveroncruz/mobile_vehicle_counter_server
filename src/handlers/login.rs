@@ -12,7 +12,7 @@ use crate::handlers::middleware::Claims;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
-    username: String,
+    email: String,
     password: String,
 }
 
@@ -27,7 +27,7 @@ pub async fn login_handler(
 ) -> Result<Json<AuthResponse>, StatusCode> {
     // 1. Fetch the user using SeaORM
     let user = users::Entity::find()
-        .filter(users::Column::UserName.eq(&payload.username))
+        .filter(users::Column::Email.eq(&payload.email))
         .filter(users::Column::IsActive.eq(true))
         .one(&state.db_conn)
         .await
@@ -56,7 +56,7 @@ pub async fn login_handler(
         .timestamp() as usize;
 
     let claims = Claims {
-        sub: payload.username.clone(),
+        sub: payload.email.clone(),
         exp: expiration,
     };
 

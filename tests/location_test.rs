@@ -14,6 +14,9 @@ async fn test_full_location_lifecycle() {
     // 1. Setup environment and DB
     dotenv().ok();
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let _jwt_secret= env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+    println!("DB URL: {}", db_url);
+    println!("JWT_SECRET: {}",_jwt_secret);
     let db_conn = Database::connect(&db_url).await.unwrap();
     let state = AppState { db_conn };
 
@@ -24,7 +27,7 @@ async fn test_full_location_lifecycle() {
     // STEP 1: LOGIN TO GET TOKEN
     // ==========================================
     let login_req = json!({
-        "username": "admin",
+        "email": "admin@admin",
         "password": "asdf"
     });
 
@@ -36,7 +39,7 @@ async fn test_full_location_lifecycle() {
         .unwrap();
 
     let res = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.status(), StatusCode::OK, "The values of res.status()={} and StatusCode::OK={} are not equal ", res.status(), StatusCode::OK);
 
     let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let auth_response: Value = serde_json::from_slice(&body_bytes).unwrap();
