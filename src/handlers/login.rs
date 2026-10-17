@@ -8,6 +8,8 @@ use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 use crate::handlers::app_state::AppState;
 use crate::entities::users;
 use std::env;
+use crate::handlers::middleware::Claims;
+
 #[derive(Deserialize)]
 pub struct LoginRequest {
     username: String,
@@ -19,11 +21,6 @@ pub struct AuthResponse {
     token: String,
 }
 
-#[derive(Serialize, Deserialize)]
-struct Claims {
-    sub: String, // The subject (username or user ID)
-    exp: usize,  // Expiration time
-}
 pub async fn login_handler(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,

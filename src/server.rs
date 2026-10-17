@@ -20,6 +20,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::handlers::app_state::AppState;
 use crate::handlers::login::login_handler;
+use crate::handlers::middleware::auth_middleware;
 #[derive(Debug, Deserialize)]
 struct AlprPayload {
     camid: String,
@@ -28,9 +29,6 @@ struct AlprPayload {
     plate_image: String,
     image: String,
 }
-
-
-
 
 /// Start the alarm server.
 pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
@@ -56,14 +54,17 @@ pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     // -----------------------
     // 3. Setup axum server
     // -----------------------
-    let app = Router::new()
-        .route( "/api/login", post(login_handler))
-        .layer(cors)
-        .with_state(state);
+    let public_routes= Router::new()
+        .route( "/api/login", post(login_handler));
 
     println!("Alarm server listening on http://127.0.0.1:3000");
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
+    let app = Router::new()
+        .merge(public_routes)
+        .layer(cors)
+        .with_state(state);
+
 
     axum::serve(listener, app).await?;
 
