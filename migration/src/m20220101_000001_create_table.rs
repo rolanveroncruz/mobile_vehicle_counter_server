@@ -123,6 +123,9 @@ impl Migration {
                     .string()
                     .not_null()
                 )
+                .check(
+                    Expr::col(Camera::Orientation).is_in(["Inbound", "Outbound"])
+                )
                 .to_owned(),
         ).await
     }
