@@ -12,6 +12,7 @@ use crate::handlers::app_state::AppState;
 #[derive(Deserialize)]
 pub struct CreateLocationRequest {
     pub name: String,
+    pub description: String,
     // Add other fields here (e.g., description, coordinates) if your DB table requires them
 }
 
@@ -42,6 +43,7 @@ pub async fn create_location(
     let new_location = location::ActiveModel {
         id: Set(new_uuid),
         name: Set(payload.name),
+        description: Set(payload.description),
         // Add other Set() mappings here if needed
         ..Default::default()
     };
