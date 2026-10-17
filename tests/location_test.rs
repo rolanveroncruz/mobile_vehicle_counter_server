@@ -1,7 +1,4 @@
-use axum::{
-    body::Body,
-    http::{Request, header, StatusCode},
-};
+use axum::{body::Body, http::{Request, header, StatusCode}, Router};
 use tower::ServiceExt;
 use serde_json::{json, Value};
 use sea_orm::Database;
@@ -11,7 +8,7 @@ use dotenvy::dotenv;
 // Import from your library crate
 use mobile_vehicle_counter_server::handlers::app_state::AppState;
 use mobile_vehicle_counter_server::server::build_app;
-
+use mobile_vehicle_counter_server::entities::location::Model as LocationModel;
 #[tokio::test]
 async fn test_full_location_lifecycle() {
     // 1. Setup environment and DB
@@ -47,27 +44,16 @@ async fn test_full_location_lifecycle() {
     let auth_header = format!("Bearer {}", token);
 
     // ==========================================
-    // STEP 2: CREATE A LOCATION
+    // STEP 2: CREATE LOCATIONS
     // ==========================================
-    let create_req = json!({
-        "name": "Integration Test Camera",
-        "description": "Test camera for automated testing"
-    });
+    let mut created_locations:Vec<LocationModel> = Vec::new();
 
-    let req = Request::builder()
-        .method("POST")
-        .uri("/api/locations")
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, &auth_header)
-        .body(Body::from(serde_json::to_vec(&create_req).unwrap()))
-        .unwrap();
-
-    let res = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED);
-
-    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let created_location: Value = serde_json::from_slice(&body_bytes).unwrap();
-    let location_id = created_location["id"].as_str().unwrap().to_string();
+    for i in 0..5 {
+        let location_name = format!("Integration Test Location {}", i);
+        let location_description = format!("Integration Test Location Description {}", i);
+        let new_location = post_location_with_description(&location_name, &location_description, app.clone(), &auth_header). await;
+        created_locations.push(new_location);
+    }
 
     // ==========================================
     // STEP 3: GET LOCATIONS & VERIFY EXISTENCE
@@ -83,25 +69,30 @@ async fn test_full_location_lifecycle() {
     assert_eq!(res.status(), StatusCode::OK);
 
     let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let locations: Vec<Value> = serde_json::from_slice(&body_bytes).unwrap();
+    let fetched_locations: Vec<LocationModel> = serde_json::from_slice(&body_bytes).unwrap();
 
-    let exists = locations.iter().any(|loc| loc["id"] == location_id);
-    assert!(exists, "Newly created location was not found in the GET array");
+    for expected in &created_locations {
+        let exists = fetched_locations.iter().any(|loc| loc.id == expected.id && loc.name == expected.name);
+        assert!(exists, "Newly created location was not found in the GET array");
+    }
 
     // ==========================================
-    // STEP 4: DELETE THE LOCATION
+    // STEP 4: DELETE THE LOCATIONS
     // ==========================================
-    let req = Request::builder()
-        .method("DELETE")
-        // Note: Your router is configured as /api/locations/{id}[cite: 6]
-        // Ensure Axum 0.8 correctly maps this, otherwise change it to /api/locations/:id
-        .uri(format!("/api/locations/{}", location_id))
-        .header(header::AUTHORIZATION, &auth_header)
-        .body(Body::empty())
-        .unwrap();
+    for loc_to_delete in &created_locations{
+        let req = Request::builder()
+            .method("DELETE")
+            // Note: Your router is configured as /api/locations/{id}[cite: 6]
+            // Ensure Axum 0.8 correctly maps this, otherwise change it to /api/locations/:id
+            .uri(format!("/api/locations/{}", loc_to_delete.id))
+            .header(header::AUTHORIZATION, &auth_header)
+            .body(Body::empty())
+            .unwrap();
 
-    let res = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    }
+
 
     // ==========================================
     // STEP 5: GET LOCATIONS & VERIFY DELETION
@@ -117,8 +108,35 @@ async fn test_full_location_lifecycle() {
     assert_eq!(res.status(), StatusCode::OK);
 
     let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let locations_after: Vec<Value> = serde_json::from_slice(&body_bytes).unwrap();
+    let locations_after: Vec<LocationModel> = serde_json::from_slice(&body_bytes).unwrap();
 
-    let still_exists = locations_after.iter().any(|loc| loc["id"] == location_id);
-    assert!(!still_exists, "Location was found in GET array after deletion");
+    for deleted in created_locations{
+        let still_exists = locations_after.iter().any(|loc| loc.id == deleted.id && loc.name == deleted.name);
+        assert!(!still_exists, "Location was found in GET array after deletion");
+    }
+}
+
+async fn post_location_with_description(name: &str, description: &str, app:Router, auth_header: &str)->LocationModel {
+    let create_req = json!({
+        "name": name,
+        "description": description
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/locations")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, auth_header)
+        .body(Body::from(serde_json::to_vec(&create_req).unwrap()))
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let created_location: LocationModel = serde_json::from_slice(&body_bytes).unwrap();
+
+    created_location
+
+
 }
