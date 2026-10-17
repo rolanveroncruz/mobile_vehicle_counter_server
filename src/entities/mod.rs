@@ -6,3 +6,4 @@ pub mod alpr_events;
 pub mod camera;
 pub mod location;
 pub mod sublocation;
+pub mod users;

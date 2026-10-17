@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+#![allow(dead_code,unused)]
+use dotenvy::dotenv;
+use std::env;
 
 use axum::{
     body::Bytes,
@@ -10,19 +12,14 @@ use axum::{
 };
 use axum::http::Method;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use sea_orm::{Database, Iden};
 
 use uuid::Uuid;
 use tower_http::cors::{Any, CorsLayer};
 
-#[derive(Clone)]
-struct AppState {
-    db_path: PathBuf,
-    out_dir: PathBuf,
-}
-
-
+use crate::handlers::app_state::AppState;
+use crate::handlers::login::login_handler;
 #[derive(Debug, Deserialize)]
 struct AlprPayload {
     camid: String,
@@ -37,37 +34,30 @@ struct AlprPayload {
 
 /// Start the alarm server.
 pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
-    let out_dir = PathBuf::from("out");
-
-    // -----------------------------------------
-    // 1. Create the output directory if necessary.
-    // -----------------------------------------
-    std::fs::create_dir_all(&out_dir)?;
-
-    let db_path = out_dir.join("alpr_events.db");
+    dotenv().ok();
 
     // ------------------------
-    // 2. Initialize the database.
+    // 1. Configure the CORS layer
     // ------------------------
-    initialize_database(&db_path)?;
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST])
         .allow_headers(Any);
 
+    // ------------------------
+    // 2. Read the DATABASE_URL and connect
+    // ------------------------
+    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set in .env file");
+    let db_conn = Database::connect(&db_url).await?;
     let state = AppState {
-        db_path,
-        out_dir,
+        db_conn,
     };
 
     // -----------------------
     // 3. Setup axum server
     // -----------------------
-
     let app = Router::new()
-        .route("/api/alpr/event", post(alpr_webhook_handler))
-        .route( "/api/alpr/events", get(get_alpr_events))
-        .fallback(fallback_handler)
+        .route( "/api/login", post(login_handler))
         .layer(cors)
         .with_state(state);
 
@@ -81,28 +71,6 @@ pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 
-/// Create the database and tables if they don't already exist.
-fn initialize_database(
-    db_path: &PathBuf,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let connection = Connection::open(db_path)?;
-
-    connection.execute_batch(
-        r#"
-        CREATE TABLE IF NOT EXISTS alpr_events (
-            id TEXT PRIMARY KEY NOT NULL,
-            camid TEXT NOT NULL,
-            date TEXT NOT NULL,
-            plate TEXT NOT NULL,
-            image TEXT NOT NULL,
-            plate_image TEXT NOT NULL
-        );
-        "#,
-    )?;
-
-    Ok(())
-}
-
 
 /// Receive an ALPR event from the camera.
 async fn alpr_webhook_handler(
@@ -110,82 +78,6 @@ async fn alpr_webhook_handler(
     _headers: header::HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
-    println!("\n=== Incoming ALPR Trigger from VIGI ===");
-
-    // ---------------------------
-    // 1. Decode the JSON payload.
-    // ---------------------------
-
-    let payload: AlprPayload = match serde_json::from_slice(&body) {
-        Ok(payload) => payload,
-        Err(error) => {
-            eprintln!("Failed to parse ALPR JSON: {}", error);
-            return StatusCode::BAD_REQUEST;
-        }
-    };
-
-    println!("Camera: {}", payload.camid);
-    println!("Plate:  {}", payload.plate);
-    println!("Date:   {}", payload.date);
-
-
-    // ---------------------------------
-    // 2. Open a connection with sqlite
-    // ---------------------------------
-    let connection = match Connection::open(&state.db_path) {
-        Ok(connection) => connection,
-        Err(error) => {
-            eprintln!("Failed to open database: {}", error);
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    };
-
-    // --------------------------------------
-    // 3. Generate a unique ID for this event
-    // --------------------------------------
-    let event_id = Uuid::new_v4().to_string();
-
-
-    // ----------------------------------------------
-    // 4. Decode and save the event images into files.
-    // ----------------------------------------------
-
-    let (image_filename, plate_filename) = match decode_and_save_images_to_files(&state, &event_id, &payload.image, &payload.plate_image){
-        Ok(filenames)=>filenames,
-        Err(error) => {
-            eprintln!("Failed to save  images:{}", error);
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    };
-
-    // ------------------------------------
-    // 5. Insert the event into SQLite
-    // ------------------------------------
-    let result = connection.execute(
-        r#"
-        INSERT INTO alpr_events
-            (id,camid, date, plate, image, plate_image)
-        VALUES
-            (?1, ?2, ?3, ?4, ?5, ?6)
-        "#,
-        params![
-            event_id,
-            payload.camid,
-            payload.date,
-            payload.plate,
-            image_filename,
-            plate_filename,
-
-        ],
-    );
-    if let Err(error) = result{
-        eprintln!("Failed to insert alpr event: {}", error);
-        let _ = std::fs::remove_file(state.out_dir.join(&image_filename));
-        let _ = std::fs::remove_file(state.out_dir.join(&plate_filename));
-        return StatusCode::INTERNAL_SERVER_ERROR;
-    }
-
-    StatusCode::OK
 }
 
 fn decode_and_save_images_to_files(state:&AppState,
@@ -196,7 +88,7 @@ fn decode_and_save_images_to_files(state:&AppState,
     // ------------------------
     // 1. Decode the scene image.
     // -------------------------
-
+/*
     let image_bytes = match STANDARD.decode(payload_image) {
         Ok(bytes) => bytes,
         Err(error) => {
@@ -246,7 +138,8 @@ fn decode_and_save_images_to_files(state:&AppState,
         return Err(std::io::Error::new(std::io::ErrorKind::Other, error));
     }
     Ok((image_filename, plate_image_filename))
-
+*/
+    Ok(("hello".to_string(), "world".to_string()))
 }
 
 #[derive(Debug, Serialize)]
@@ -262,77 +155,5 @@ struct AlprRecord {
 async fn get_alpr_events(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<AlprRecord>>, StatusCode> {
-    let connection = Connection::open(&state.db_path)
-        .map_err(|error| {
-            eprintln!("Failed to open database: {}", error);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    let mut statement = connection
-        .prepare(
-            r#"
-            SELECT
-                id,
-                camid,
-                date,
-                plate,
-                image,
-                plate_image
-            FROM alpr_events
-            ORDER BY date DESC
-            "#,
-        )
-        .map_err(|error| {
-            eprintln!("Failed to prepare query: {}", error);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    let rows = statement
-        .query_map([], |row| {
-            Ok(AlprRecord {
-                id: row.get(0)?,
-                camid: row.get(1)?,
-                date: row.get(2)?,
-                plate: row.get(3)?,
-                image: row.get(4)?,
-                plate_image: row.get(5)?,
-            })
-        })
-        .map_err(|error| {
-            eprintln!("Failed to query ALPR events: {}", error);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    let mut records = Vec::new();
-
-    for row in rows {
-        records.push(row.map_err(|error| {
-            eprintln!("Failed to read ALPR row: {}", error);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?);
-    }
-
-    Ok(Json(records))
-}
-
-
-/// Temporary handler for requests that don't match a known route.
-async fn fallback_handler(
-    method: axum::http::Method,
-    uri: axum::http::Uri,
-    headers: header::HeaderMap,
-    body: Bytes,
-) -> impl IntoResponse {
-    println!("\n=== UNKNOWN REQUEST ===");
-    println!("Method: {}", method);
-    println!("URI: {}", uri);
-    println!("Body: {} bytes", body.len());
-
-    for (name, value) in &headers {
-        if let Ok(value) = value.to_str() {
-            println!("{}: {}", name, value);
-        }
-    }
-
-    StatusCode::NOT_FOUND
+    Ok(Json(vec![]))
 }

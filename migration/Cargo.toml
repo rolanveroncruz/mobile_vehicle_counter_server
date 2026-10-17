@@ -13,4 +13,4 @@ path = "src/lib.rs"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 sea-orm-migration = { version = "2.0.4", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 sea-orm = { version = "2.0.4", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
-argon2 = { version = "0.6.0", features = ["getrandom"]}
+argon2 = "0.6.0"
