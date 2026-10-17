@@ -6,11 +6,13 @@ use axum::{
     body::Bytes,
     extract::State,
     http::{header, StatusCode},
+    middleware,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use axum::http::Method;
+use axum::routing::delete;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use sea_orm::{Database, Iden};
@@ -19,6 +21,8 @@ use uuid::Uuid;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::handlers::app_state::AppState;
+use crate::handlers::locations;
+use crate::handlers::locations::{create_location, delete_location, get_all_locations};
 use crate::handlers::login::login_handler;
 use crate::handlers::middleware::auth_middleware;
 #[derive(Debug, Deserialize)]
@@ -30,7 +34,26 @@ struct AlprPayload {
     image: String,
 }
 
-/// Start the alarm server.
+pub fn build_app(state: AppState)->Router<AppState>{
+
+    // -----------------------
+    // 3. Setup axum server
+    // -----------------------
+    let public_routes= Router::new()
+        .route( "/api/login", post(login_handler));
+
+    let protected_routes = Router::<AppState>::new()
+        .route("/api/locations", get(get_all_locations).post(create_location))
+        .route("/api/locations/{id}", delete(delete_location))
+        .route_layer(middleware::from_fn(auth_middleware));
+
+    let app = Router::new()
+        .merge(public_routes)
+        .merge(protected_routes);
+
+    app
+
+}
 pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
@@ -47,24 +70,17 @@ pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     // ------------------------
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set in .env file");
     let db_conn = Database::connect(&db_url).await?;
+
     let state = AppState {
         db_conn,
     };
 
-    // -----------------------
-    // 3. Setup axum server
-    // -----------------------
-    let public_routes= Router::new()
-        .route( "/api/login", post(login_handler));
-
-    println!("Alarm server listening on http://127.0.0.1:3000");
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
-    let app = Router::new()
-        .merge(public_routes)
+    let app = build_app(state.clone())
         .layer(cors)
         .with_state(state);
 
+    println!("Alarm server listening on http://127.0.0.1:3000");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
 
     axum::serve(listener, app).await?;
 
