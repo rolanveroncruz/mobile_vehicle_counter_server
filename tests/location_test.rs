@@ -43,7 +43,7 @@ async fn test_full_location_lifecycle() {
 
     let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let auth_response: Value = serde_json::from_slice(&body_bytes).unwrap();
-    let token = auth_response["token"].as_str().unwrap().to_string();
+    let token = auth_response["access_token"].as_str().unwrap().to_string();
     let auth_header = format!("Bearer {}", token);
 
     // ==========================================

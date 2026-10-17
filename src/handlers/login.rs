@@ -17,8 +17,16 @@ pub struct LoginRequest {
 }
 
 #[derive(Serialize)]
+pub struct AuthResponseUser{
+    id: i64,
+    email: String,
+}
+
+#[derive(Serialize)]
 pub struct AuthResponse {
-    token: String,
+    access_token: String,
+    expires_in: i64,
+    user: AuthResponseUser,
 }
 
 pub async fn login_handler(
@@ -76,5 +84,12 @@ pub async fn login_handler(
     })?;
 
     // 6. Return the Bearer token
-    Ok(Json(AuthResponse { token }))
+    Ok(Json(AuthResponse {
+        access_token:token,
+        expires_in: 86400, // 24 hours in seconds
+        user: AuthResponseUser{
+            id: user_model.id,
+            email: user_model.email,
+        }
+    }))
 }
